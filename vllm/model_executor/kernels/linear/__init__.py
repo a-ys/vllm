@@ -115,6 +115,9 @@ from vllm.model_executor.kernels.linear.nvfp4.flashinfer import (
     FlashInferCutlassNvFp4LinearKernel,
     FlashInferTrtllmNvFp4LinearKernel,
 )
+from vllm.model_executor.kernels.linear.nvfp4.op039_shape_routed import (
+    OP039ShapeRoutedNvFp4LinearKernel,
+)
 from vllm.model_executor.kernels.linear.nvfp4.marlin import (
     MarlinNvFp4LinearKernel,
 )
@@ -897,6 +900,15 @@ def init_nvfp4_linear_kernel(use_a16: bool = False) -> NvFp4LinearKernel:
             force_kernel = FbgemmNvFp4LinearKernel
         elif envs.VLLM_USE_NVFP4_CT_EMULATIONS:
             force_kernel = EmulationNvFp4LinearKernel
+        # AMMO OP-039 (LMI v27, PR#3 b42edcd5b, default-OFF): force the
+        # per-shape-routed wrapper that holds both cutlass and cudnn
+        # sub-kernels and dispatches at runtime on the token count M (cudnn at
+        # prefill-M, cutlass at decode-M). ADDITIVE arm inserted into the
+        # upstream 0.23.0 "auto" chain, after the opt-in emulation modes and
+        # before the generic VLLM_NVFP4_GEMM_BACKEND override, per PR#3's
+        # intended precedence. Inert when VLLM_OP039 is unset (default).
+        elif envs.VLLM_OP039:
+            force_kernel = OP039ShapeRoutedNvFp4LinearKernel
         elif envs.VLLM_NVFP4_GEMM_BACKEND is not None:
             backend_name = envs.VLLM_NVFP4_GEMM_BACKEND
             force_kernel = _NVFP4_BACKEND_TO_KERNEL.get(backend_name)
@@ -1075,6 +1087,7 @@ __all__ = [
     "FlashInferCutlassNvFp4LinearKernel",
     "FlashInferTrtllmNvFp4LinearKernel",
     "FlashInferCudnnNvFp4LinearKernel",
+    "OP039ShapeRoutedNvFp4LinearKernel",
     "MarlinNvFp4LinearKernel",
     "_KernelT",
     "DeepGemmFp8BlockScaledMMKernel",

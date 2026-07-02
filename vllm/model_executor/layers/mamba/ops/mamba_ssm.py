@@ -617,6 +617,14 @@ def selective_state_update(
         else (0, 0)
     )
     # We don't want autotune since it will overwrite the state.
+    # LMI v27 conflict resolution (Rohit, 2026-06-22): take upstream 0.23.0's
+    # JSON tuned-config system (PR #43083) and DROP PR#2's OP-011 inline retune.
+    # Rationale: 0.23.0 ships GB200/B200-autotuned SSU configs that target the
+    # same small-batch occupancy problem OP-011 addressed, but tuned per-device
+    # on the actual hardware; OP-011 was a single hand-picked B200 (148-SM) rule
+    # (default-OFF). GB200 PR2-vs-0.23.0 is unverifiable without a GB200 (launch
+    # bench is L4 + P5/H100), so we keep the upstream-aligned, base-safe path.
+    # See LMIv27 launch doc "Dropped optimizations" for the revisit note.
     # Load from JSON config if available, otherwise fall back to heuristic.
     cache_dtype = str(state.dtype).removeprefix("torch.")
     BLOCK_SIZE_M, num_warps = try_get_optimal_ssm_config(

@@ -183,7 +183,27 @@ class ModelOptQuantConfigBase(QuantizationConfig):
 
         # handle exclusion
         if self.is_layer_excluded(prefix):
+            # Keep upstream 0.23.0's (LinearBase, ParallelLMHead) tuple — 0.23.0
+            # widened this to also cover ParallelLMHead (lm_head). PR#3 was cut
+            # against ~0.21 which only had LinearBase; we preserve the wider
+            # upstream check and graft PR#3's OP-004 routing ADDITIVELY inside it.
             if isinstance(layer, (LinearBase, ParallelLMHead)):
+                # AMMO OP-004 (LMI v27, PR#3 b42edcd5b, default-OFF): the modelopt
+                # NVFP4 checkpoint excludes all self-attention QKV/O projections
+                # from FP4, so they run bf16. When VLLM_OP004_FP8_ATTN is set,
+                # route just those projections through the FP8 (W8A8)
+                # cutlass_scaled_mm path instead. lm_head (ParallelLMHead) and
+                # vision-tower layers stay bf16 — is_op004_attn_projection(prefix)
+                # filters to attention projections only, so the wider isinstance
+                # tuple does not pull lm_head into the FP8 path.
+                from vllm.model_executor.layers.quantization.op004_fp8_attn import (
+                    Op004Fp8AttnLinearMethod,
+                    is_op004_attn_projection,
+                    op004_fp8_attn_enabled,
+                )
+
+                if op004_fp8_attn_enabled() and is_op004_attn_projection(prefix):
+                    return Op004Fp8AttnLinearMethod(prefix=prefix)
                 return UnquantizedLinearMethod()
             return None
 
